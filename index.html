@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- Crucial viewport meta tags to block native elastic zooms/gestures -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Offline Ruler</title>
+  <link rel="manifest" href="manifest.json">
+  <!-- Standard fallback Apple Touch icon utilizing our SVG icon -->
+  <link rel="apple-touch-icon" href="icon.svg">
+
+  <style>
+    :root {
+      --bg-color: #FAFAFA;
+      --grid-color: #E2E2E2;
+      --ruler-color: #111111;
+      --accent-red: #D32F2F;
+    }
+
+    * {
+      box-sizing: border-box;
+      /* Completely eliminate selection and contextual menus on hold/press */
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: var(--bg-color);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow: hidden;
+      /* Prevent elastic bounce back and swipe refresh navigation */
+      position: fixed;
+      overscroll-behavior: none;
+    }
+
+    /* Core canvas layer containing our vector-sharp SVG grid and lines */
+    #ruler-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Floating interface widgets */
+    .btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+      border-radius: 50%;
+      transition: background-color 0.15s ease;
+    }
+    .btn:active {
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    /* Top control panel (safe area friendly) */
+    .top-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding-top: max(16px, env(safe-area-inset-top));
+      padding-right: max(16px, env(safe-area-inset-right));
+      padding-left: max(16px, env(safe-area-inset-left));
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 16px;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .top-bar * {
+      pointer-events: auto;
+    }
+
+    #gear-btn svg {
+      width: 28px;
+      height: 28px;
+      fill: var(--ruler-color);
+    }
+
+    /* Calibration components (hidden by default) */
+    .calibration-ui {
+      display: none;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+
+    body.calibrating .calibration-ui {
+      display: block;
+      opacity: 1;
+    }
+
+    /* Unit toggle styled exactly like mockup */
+    .unit-toggle {
+      border: 2px solid var(--accent-red);
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 4px;
+      display: flex;
+      padding: 2px;
+      font-weight: bold;
+      font-size: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .unit-toggle button {
+      border: none;
+      background: none;
+      padding: 6px 14px;
+      color: var(--accent-red);
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      border-radius: 2px;
+      text-transform: uppercase;
+    }
+
+    .unit-toggle button.active {
+      background-color: var(--accent-red);
+      color: #FFFFFF;
+    }
+
+    /* Right side calibration slider matching your mockup layout */
+    .slider-container {
+      position: absolute;
+      right: max(16px, env(safe-area-inset-right));
+      top: 25%;
+      bottom: 15%;
+      width: 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 90;
+    }
+
+    .slider-container svg {
+      width: 28px;
+      height: 28px;
+      stroke: var(--accent-red);
+      fill: none;
+      stroke-width: 2.5;
+    }
+
+    .vertical-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 8px;
+      height: 100%;
+      background: var(--accent-red);
+      outline: none;
+      border-radius: 4px;
+      /* Rotate slider elements into vertical alignment */
+      writing-mode: bt-lr; /* IE */
+      -webkit-appearance: slider-vertical; /* Webkit standard */
+    }
+
+    /* Custom custom styling for Safari slider thumbs */
+    .vertical-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 32px;
+      height: 16px;
+      border-radius: 3px;
+      background: var(--accent-red);
+      border: 2px solid #FFFFFF;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Main vector presentation canvas -->
+  <svg id="ruler-svg">
+    <g id="grid-group" stroke="var(--grid-color)" stroke-width="1"></g>
+    <g id="ticks-group" stroke="var(--ruler-color)" stroke-linecap="square"></g>
+    <g id="labels-group"></g>
+  </svg>
+
+  <!-- Controls overlay -->
+  <div class="top-bar">
+    <div class="calibration-ui unit-toggle">
+      <button id="unit-cm" class="active" onclick="setUnit('cm')">CM</button>
+      <button id="unit-inch" onclick="setUnit('inch')">Inch</button>
+    </div>
+    
+    <button id="gear-btn" class="btn" onclick="toggleCalibrationMode()">
+      <svg viewBox="0 0 24 24">
+        <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Calibration Panel -->
+  <div class="calibration-ui slider-container">
+    <!-- Zoom-in / Magnifier Plus Icon -->
+    <button class="btn" onclick="adjustScale(0.5)">
+      <svg viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        <line x1="11" y1="8" x2="11" y2="14"/>
+        <line x1="8" y1="11" x2="14" y2="11"/>
+      </svg>
+    </button>
+
+    <input type="range" id="scale-slider" class="vertical-slider" min="80" max="350" step="0.5" oninput="handleSliderChange(this.value)">
+
+    <!-- Zoom-out / Magnifier Minus Icon -->
+    <button class="btn" onclick="adjustScale(-0.5)">
+      <svg viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        <line x1="8" y1="11" x2="14" y2="11"/>
+      </svg>
+    </button>
+  </div>
+
+  <script>
+    // State - default config matches typical modern high-DPI iOS CSS densities
+    let ppi = parseFloat(localStorage.getItem('ruler_ppi')) || 163.0; 
+    let unit = localStorage.getItem('ruler_unit') || 'cm';
+    let isCalibrating = false;
+
+    const svg = document.getElementById('ruler-svg');
+    const gridGroup = document.getElementById('grid-group');
+    const ticksGroup = document.getElementById('ticks-group');
+    const labelsGroup = document.getElementById('labels-group');
+    const slider = document.getElementById('scale-slider');
+
+    // Block standard rubber banding and non-passive gestures on mobile safari
+    document.addEventListener('touchmove', (e) => {
+      if (e.scale !== 1) e.preventDefault(); // blocks pinch zoom behavior completely
+    }, { passive: false });
+
+    function init() {
+      slider.value = ppi;
+      drawRuler();
+    }
+
+    function toggleCalibrationMode() {
+      isCalibrating = !isCalibrating;
+      document.body.classList.toggle('calibrating', isCalibrating);
+    }
+
+    function setUnit(newUnit) {
+      unit = newUnit;
+      localStorage.setItem('ruler_unit', unit);
+      document.getElementById('unit-cm').classList.toggle('active', unit === 'cm');
+      document.getElementById('unit-inch').classList.toggle('active', unit === 'inch');
+      drawRuler();
+    }
+
+    function handleSliderChange(val) {
+      ppi = parseFloat(val);
+      localStorage.setItem('ruler_ppi', ppi);
+      drawRuler();
+    }
+
+    function adjustScale(delta) {
+      ppi = Math.max(80, Math.min(350, ppi + delta));
+      slider.value = ppi;
+      localStorage.setItem('ruler_ppi', ppi);
+      drawRuler();
+    }
+
+    function drawRuler() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      
+      // Clear all dynamically generated geometry
+      gridGroup.innerHTML = '';
+      ticksGroup.innerHTML = '';
+      labelsGroup.innerHTML = '';
+
+      const pixelsPerMm = ppi / 25.4;
+
+      if (unit === 'cm') {
+        const mmStep = pixelsPerMm;
+        const totalMm = Math.ceil(Math.max(width, height) / mmStep);
+
+        for (let i = 0; i <= totalMm; i++) {
+          const pos = i * mmStep;
+
+          // Draw the background structural grid lines (major cm markings)
+          if (i % 10 === 0 && i > 0) {
+            // Horizontal gridline
+            if (pos < height) {
+              appendLine(gridGroup, 0, pos, width, pos);
+            }
+            // Vertical gridline
+            if (pos < width) {
+              appendLine(gridGroup, pos, 0, pos, height);
+            }
+          }
+
+          // Left Edge Ruler Drawing (vertical ticks)
+          if (pos < height) {
+            let tickLength = 8;
+            let strokeWidth = 1;
+
+            if (i % 10 === 0) { // CM unit
+              tickLength = 24;
+              strokeWidth = 2;
+              appendLabel(labelsGroup, i / 10, tickLength + 10, pos + 5, 'left');
+            } else if (i % 5 === 0) { // Half CM unit
+              tickLength = 16;
+              strokeWidth = 1.5;
+            }
+            appendLine(ticksGroup, 0, pos, tickLength, pos, strokeWidth);
+          }
+
+          // Bottom Edge Ruler Drawing (horizontal ticks)
+          if (pos < width) {
+            let tickLength = 8;
+            let strokeWidth = 1;
+
+            if (i % 10 === 0) { // CM unit
+              tickLength = 24;
+              strokeWidth = 2;
+              appendLabel(labelsGroup, i / 10, pos, height - tickLength - 10, 'bottom');
+            } else if (i % 5 === 0) { // Half CM unit
+              tickLength = 16;
+              strokeWidth = 1.5;
+            }
+            appendLine(ticksGroup, pos, height, pos, height - tickLength, strokeWidth);
+          }
+        }
+      } else {
+        // Inch System calculation
+        const inchStep = ppi;
+        const subStep = ppi / 16; // 1/16th inch increments
+        const totalSubSteps = Math.ceil(Math.max(width, height) / subStep);
+
+        for (let i = 0; i <= totalSubSteps; i++) {
+          const pos = i * subStep;
+
+          // Draw structural background grid lines for major inch increments
+          if (i % 16 === 0 && i > 0) {
+            if (pos < height) appendLine(gridGroup, 0, pos, width, pos);
+            if (pos < width) appendLine(gridGroup, pos, 0, pos, height);
+          }
+
+          // Left Edge Ruler Drawing
+          if (pos < height) {
+            let tickLength = 6;
+            let strokeWidth = 1;
+
+            if (i % 16 === 0) { // Major Inch
+              tickLength = 26;
+              strokeWidth = 2;
+              appendLabel(labelsGroup, i / 16, tickLength + 10, pos + 5, 'left');
+            } else if (i % 8 === 0) { // 1/2 Inch
+              tickLength = 18;
+              strokeWidth = 1.5;
+            } else if (i % 4 === 0) { // 1/4 Inch
+              tickLength = 12;
+              strokeWidth = 1.2;
+            } else if (i % 2 === 0) { // 1/8 Inch
+              tickLength = 8;
+            }
+            appendLine(ticksGroup, 0, pos, tickLength, pos, strokeWidth);
+          }
+
+          // Bottom Edge Ruler Drawing
+          if (pos < width) {
+            let tickLength = 6;
+            let strokeWidth = 1;
+
+            if (i % 16 === 0) { // Major Inch
+              tickLength = 26;
+              strokeWidth = 2;
+              appendLabel(labelsGroup, i / 16, pos, height - tickLength - 10, 'bottom');
+            } else if (i % 8 === 0) { // 1/2 Inch
+              tickLength = 18;
+              strokeWidth = 1.5;
+            } else if (i % 4 === 0) { // 1/4 Inch
+              tickLength = 12;
+              strokeWidth = 1.2;
+            } else if (i % 2 === 0) { // 1/8 Inch
+              tickLength = 8;
+            }
+            appendLine(ticksGroup, pos, height, pos, height - tickLength, strokeWidth);
+          }
+        }
+      }
+    }
+
+    function appendLine(parent, x1, y1, x2, y2, strokeWidth = 1) {
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', x1);
+      line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2);
+      line.setAttribute('y2', y2);
+      if (strokeWidth !== 1) {
+        line.setAttribute('stroke-width', strokeWidth);
+      }
+      parent.appendChild(line);
+    }
+
+    function appendLabel(parent, text, x, y, alignment) {
+      const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      txt.setAttribute('x', x);
+      txt.setAttribute('y', y);
+      txt.setAttribute('fill', 'var(--ruler-color)');
+      txt.setAttribute('font-size', '14');
+      txt.setAttribute('font-weight', '500');
+      
+      if (alignment === 'left') {
+        txt.setAttribute('text-anchor', 'start');
+        txt.setAttribute('dominant-baseline', 'middle');
+      } else if (alignment === 'bottom') {
+        txt.setAttribute('text-anchor', 'middle');
+        txt.setAttribute('dominant-baseline', 'auto');
+      }
+      
+      txt.textContent = text;
+      parent.appendChild(txt);
+    }
+
+    window.addEventListener('resize', drawRuler);
+    window.addEventListener('orientationchange', () => setTimeout(drawRuler, 200));
+
+    // Register PWA service worker logic
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => {
+          console.warn("ServiceWorker registration omitted or unsupported on local testing:", err);
+        });
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
