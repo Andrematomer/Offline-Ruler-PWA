@@ -454,6 +454,7 @@
     <div class="sidebar-section" style="padding-top: 12px;">
       <button class="action-btn btn-secondary" onclick="clearAllGuides()">Clear All Guides</button>
     </div>
+  </div>
 
   <script>
     // Scale and Units management (PPI saved persistently)
@@ -582,9 +583,9 @@
         return;
       }
 
-      // Check boundary margins to trigger manual guide creation
-      const inLeftRuler = (x <= 45);
-      const inBottomRuler = (y >= rect.height - 45);
+      // Check boundary margins to trigger manual guide creation (expanded bounds for modern display safe-areas)
+      const inLeftRuler = (x <= 55);
+      const inBottomRuler = (y >= rect.height - 75);
 
       if (inLeftRuler || inBottomRuler) {
         touchStartPos = { x, y };
@@ -723,7 +724,8 @@
 
         // Vertical Scale (Left Edge) - Bottom (0) to Top
         const totalMmY = Math.ceil(height / mmStep);
-        for (let i = 0; i <= totalMmY; i++) {
+        // Start from i = 1 to remove annoying crossed 0 tick mark
+        for (let i = 1; i <= totalMmY; i++) {
           const pos = height - (i * mmStep);
           if (pos >= 0) {
             let tickLength = 8;
@@ -733,7 +735,6 @@
               tickLength = 24;
               strokeWidth = 2;
               
-              // Only draw positive values; corner '0' is skipped
               if (i > 0) {
                 appendLabel(labelsGroup, i / 10, tickLength + 10, pos + 5, 'left');
                 appendLine(gridGroup, 0, pos, width, pos); 
@@ -748,7 +749,8 @@
 
         // Horizontal Scale (Bottom Edge) - Left (0) to Right
         const totalMmX = Math.ceil(width / mmStep);
-        for (let i = 0; i <= totalMmX; i++) {
+        // Start from i = 1 to remove annoying crossed 0 tick mark
+        for (let i = 1; i <= totalMmX; i++) {
           const pos = i * mmStep;
           if (pos < width) {
             let tickLength = 8;
@@ -775,7 +777,8 @@
 
         // Vertical Scale (Left Edge)
         const totalStepsY = Math.ceil(height / subStep);
-        for (let i = 0; i <= totalStepsY; i++) {
+        // Start from i = 1 to remove annoying crossed 0 tick mark
+        for (let i = 1; i <= totalStepsY; i++) {
           const pos = height - (i * subStep);
           if (pos >= 0) {
             let tickLength = 6;
@@ -804,7 +807,8 @@
 
         // Horizontal Scale (Bottom Edge)
         const totalStepsX = Math.ceil(width / subStep);
-        for (let i = 0; i <= totalStepsX; i++) {
+        // Start from i = 1 to remove annoying crossed 0 tick mark
+        for (let i = 1; i <= totalStepsX; i++) {
           const pos = i * subStep;
           if (pos < width) {
             let tickLength = 6;
