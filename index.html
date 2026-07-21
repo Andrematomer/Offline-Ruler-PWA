@@ -2,13 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <!-- Crucial viewport meta tags to block native elastic zooms/gestures -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Offline Ruler</title>
   <link rel="manifest" href="manifest.json">
-  <!-- Standard fallback Apple Touch icon utilizing our SVG icon -->
   <link rel="apple-touch-icon" href="icon.svg">
 
   <style>
@@ -16,12 +14,18 @@
       --bg-color: #FAFAFA;
       --grid-color: #E2E2E2;
       --ruler-color: #111111;
-      --accent-red: #D32F2F;
+      --system-blue: #007AFF;
+      --system-red: #FF3B30;
+      --cyan-guide: #00B4D8;
+      --cyan-text: #0077B6;
+      --cyan-bg: rgba(224, 251, 252, 0.95);
+      --red-guide: #FF3B30;
+      --red-text: #C1121F;
+      --red-bg: rgba(255, 230, 230, 0.95);
     }
 
     * {
       box-sizing: border-box;
-      /* Completely eliminate selection and contextual menus on hold/press */
       -webkit-touch-callout: none;
       -webkit-user-select: none;
       user-select: none;
@@ -35,19 +39,16 @@
       background-color: var(--bg-color);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       overflow: hidden;
-      /* Prevent elastic bounce back and swipe refresh navigation */
       position: fixed;
       overscroll-behavior: none;
     }
 
-    /* Core canvas layer containing our vector-sharp SVG grid and lines */
     #ruler-svg {
       width: 100%;
       height: 100%;
       display: block;
     }
 
-    /* Floating interface widgets */
     .btn {
       background: none;
       border: none;
@@ -57,200 +58,488 @@
       justify-content: center;
       padding: 8px;
       border-radius: 50%;
-      transition: background-color 0.15s ease;
+      transition: background-color 0.15s ease, opacity 0.15s ease;
     }
     .btn:active {
       background-color: rgba(0, 0, 0, 0.05);
     }
 
-    /* Top control panel (safe area friendly) */
+    /* Fixed top menu bar containing the gear */
     .top-bar {
       position: absolute;
       top: 0;
-      left: 0;
       right: 0;
-      padding-top: max(16px, env(safe-area-inset-top));
-      padding-right: max(16px, env(safe-area-inset-right));
-      padding-left: max(16px, env(safe-area-inset-left));
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      gap: 16px;
-      pointer-events: none;
+      padding-top: max(12px, env(safe-area-inset-top));
+      padding-right: max(12px, env(safe-area-inset-right));
       z-index: 100;
+      pointer-events: none;
     }
     .top-bar * {
       pointer-events: auto;
     }
 
+    #gear-btn {
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      width: 44px;
+      height: 44px;
+    }
+
     #gear-btn svg {
-      width: 28px;
-      height: 28px;
+      width: 24px;
+      height: 24px;
       fill: var(--ruler-color);
     }
 
-    /* Calibration components (hidden by default) */
-    .calibration-ui {
-      display: none;
-      opacity: 0;
-      transition: opacity 0.25s ease;
-    }
-
-    body.calibrating .calibration-ui {
-      display: block;
-      opacity: 1;
-    }
-
-    /* Unit toggle styled exactly like mockup */
-    .unit-toggle {
-      border: 2px solid var(--accent-red);
-      background: rgba(255, 255, 255, 0.9);
-      border-radius: 4px;
+    /* Settings Sidebar */
+    .sidebar {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 290px;
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-left: 1px solid rgba(0, 0, 0, 0.1);
+      padding: 24px;
+      padding-top: max(70px, calc(env(safe-area-inset-top) + 50px));
+      padding-bottom: max(24px, env(safe-area-inset-bottom));
+      box-shadow: -4px 0 24px rgba(0,0,0,0.08);
+      transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+      z-index: 95;
       display: flex;
-      padding: 2px;
-      font-weight: bold;
-      font-size: 14px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      flex-direction: column;
+      gap: 20px;
+      overflow-y: auto;
+    }
+
+    body.settings-open .sidebar {
+      transform: translateX(0);
+    }
+
+    .sidebar-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .sidebar-section h3 {
+      margin: 0;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #666;
+      font-weight: 600;
+    }
+
+    .section-subtitle {
+      margin: -8px 0 4px 0;
+      font-size: 11px;
+      color: #777;
+      line-height: 1.35;
+    }
+
+    /* Unit toggle inside sidebar */
+    .unit-toggle {
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      background: rgba(0, 0, 0, 0.03);
+      border-radius: 8px;
+      display: flex;
+      padding: 3px;
     }
 
     .unit-toggle button {
+      flex: 1;
       border: none;
       background: none;
-      padding: 6px 14px;
-      color: var(--accent-red);
-      font-size: 14px;
-      font-weight: 700;
+      padding: 8px;
+      color: #333;
+      font-size: 13px;
+      font-weight: 600;
       cursor: pointer;
-      border-radius: 2px;
-      text-transform: uppercase;
+      border-radius: 6px;
+      transition: all 0.15s ease;
     }
 
     .unit-toggle button.active {
-      background-color: var(--accent-red);
-      color: #FFFFFF;
+      background-color: #FFFFFF;
+      color: var(--system-blue);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
     }
 
-    /* Right side calibration slider matching your mockup layout */
-    .slider-container {
-      position: absolute;
-      right: max(16px, env(safe-area-inset-right));
-      top: 25%;
-      bottom: 15%;
-      width: 48px;
+    /* Calibration controls row with responsive slider logic */
+    .calibration-row {
       display: flex;
-      flex-direction: column;
       align-items: center;
-      justify-content: space-between;
-      z-index: 90;
+      gap: 8px;
     }
 
-    .slider-container svg {
-      width: 28px;
-      height: 28px;
-      stroke: var(--accent-red);
+    .calibration-row svg {
+      width: 24px;
+      height: 24px;
+      stroke: var(--system-blue);
       fill: none;
       stroke-width: 2.5;
     }
 
-    .vertical-slider {
+    /* Robust Range Track Padding & Hitboxes */
+    .horizontal-slider {
+      flex: 1;
       -webkit-appearance: none;
       appearance: none;
-      width: 8px;
-      height: 100%;
-      background: var(--accent-red);
-      outline: none;
-      border-radius: 4px;
-      /* Rotate slider elements into vertical alignment */
-      writing-mode: bt-lr; /* IE */
-      -webkit-appearance: slider-vertical; /* Webkit standard */
+      height: 36px;
+      background: transparent;
+      cursor: pointer;
     }
 
-    /* Custom custom styling for Safari slider thumbs */
-    .vertical-slider::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 32px;
-      height: 16px;
-      border-radius: 3px;
-      background: var(--accent-red);
-      border: 2px solid #FFFFFF;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    .horizontal-slider:focus {
+      outline: none;
+    }
+
+    .horizontal-slider::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 6px;
       cursor: pointer;
+      background: #E2E2E2;
+      border-radius: 3px;
+    }
+
+    .horizontal-slider::-webkit-slider-thumb {
+      height: 24px;
+      width: 24px;
+      border-radius: 50%;
+      background: var(--system-blue);
+      border: 2px solid #FFFFFF;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      cursor: pointer;
+      -webkit-appearance: none;
+      margin-top: -9px; /* Centers thumb vertically on track */
+    }
+
+    /* Defensive Guard Locking System styles */
+    .calibration-container.locked {
+      opacity: 0.5;
+    }
+    .calibration-container.locked .horizontal-slider {
+      pointer-events: none;
+    }
+    .calibration-container.locked .btn {
+      pointer-events: none;
+    }
+
+    .lock-toggle-btn {
+      border: none;
+      background: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--system-blue);
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .lock-toggle-btn:active {
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    /* Form Fields for Generator */
+    .generator-inputs-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 11px;
+      font-weight: 500;
+      color: #666;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      border-radius: 8px;
+      font-size: 14px;
+      background: #FFF;
+      color: #000;
+      outline: none;
+    }
+
+    .form-control:focus {
+      border-color: var(--system-blue);
+    }
+
+    .action-btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.15s ease;
+    }
+
+    .action-btn:active {
+      opacity: 0.85;
+    }
+
+    .btn-primary {
+      background: var(--system-blue);
+      color: #FFF;
+    }
+
+    .btn-secondary {
+      background: rgba(0, 0, 0, 0.05);
+      color: var(--system-red);
+      border: 1px solid rgba(255, 59, 48, 0.15);
+    }
+
+    /* Instruction Cards style */
+    .instructions-card {
+      background: rgba(0, 0, 0, 0.03);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 11.5px;
+      line-height: 1.5;
+      color: #555;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      border: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    .instructions-card strong {
+      color: #111;
+    }
+
+    /* Drag Handle cursors */
+    .guide-handle-h {
+      cursor: ns-resize;
+    }
+    .guide-handle-v {
+      cursor: ew-resize;
     }
   </style>
 </head>
 <body>
 
-  <!-- Main vector presentation canvas -->
+  <!-- Dynamic Vector Canvas -->
   <svg id="ruler-svg">
     <g id="grid-group" stroke="var(--grid-color)" stroke-width="1"></g>
     <g id="ticks-group" stroke="var(--ruler-color)" stroke-linecap="square"></g>
     <g id="labels-group"></g>
+    
+    <!-- Guidelines overlay layer -->
+    <g id="guides-lines"></g>
+    <g id="guides-labels"></g>
   </svg>
 
-  <!-- Controls overlay -->
+  <!-- Top-level navigation controls -->
   <div class="top-bar">
-    <div class="calibration-ui unit-toggle">
-      <button id="unit-cm" class="active" onclick="setUnit('cm')">CM</button>
-      <button id="unit-inch" onclick="setUnit('inch')">Inch</button>
-    </div>
-    
-    <button id="gear-btn" class="btn" onclick="toggleCalibrationMode()">
+    <button id="gear-btn" class="btn" onclick="toggleSettingsSidebar()">
       <svg viewBox="0 0 24 24">
-        <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+        <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/>
       </svg>
     </button>
   </div>
 
-  <!-- Calibration Panel -->
-  <div class="calibration-ui slider-container">
-    <!-- Zoom-in / Magnifier Plus Icon -->
-    <button class="btn" onclick="adjustScale(0.5)">
-      <svg viewBox="0 0 24 24">
-        <circle cx="11" cy="11" r="8"/>
-        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        <line x1="11" y1="8" x2="11" y2="14"/>
-        <line x1="8" y1="11" x2="14" y2="11"/>
-      </svg>
-    </button>
+  <!-- Settings sidebar panel -->
+  <div class="sidebar">
+    <!-- Section 1: Units -->
+    <div class="sidebar-section">
+      <h3>Measurement Units</h3>
+      <div class="unit-toggle">
+        <button id="unit-cm" class="active" onclick="setUnit('cm')">CM</button>
+        <button id="unit-inch" onclick="setUnit('inch')">INCH</button>
+      </div>
+    </div>
 
-    <input type="range" id="scale-slider" class="vertical-slider" min="80" max="350" step="0.5" oninput="handleSliderChange(this.value)">
+    <!-- Section 2: Calibration -->
+    <div class="sidebar-section">
+      <div class="section-header">
+        <h3>Screen Calibration</h3>
+        <button id="lock-btn" class="lock-toggle-btn" onclick="toggleCalibrationLock()">
+          <span id="lock-icon">🔒</span> <span id="lock-text">Unlock</span>
+        </button>
+      </div>
+      <p class="section-subtitle">Place a physical ruler on your screen to calibrate.</p>
+      
+      <!-- Container is locked by default -->
+      <div id="calibration-container" class="calibration-container locked">
+        <div class="calibration-row">
+          <!-- Zoom Out / Minus Blue Magnifier -->
+          <button id="minus-btn" class="btn" onclick="adjustScale(-0.5)" disabled>
+            <svg viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <line x1="8" y1="11" x2="14" y2="11"/>
+            </svg>
+          </button>
 
-    <!-- Zoom-out / Magnifier Minus Icon -->
-    <button class="btn" onclick="adjustScale(-0.5)">
-      <svg viewBox="0 0 24 24">
-        <circle cx="11" cy="11" r="8"/>
-        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-        <line x1="8" y1="11" x2="14" y2="11"/>
-      </svg>
-    </button>
+          <input type="range" id="scale-slider" class="horizontal-slider" min="80" max="350" step="0.5" oninput="handleSliderChange(this.value)" disabled>
+
+          <!-- Zoom In / Plus Blue Magnifier -->
+          <button id="plus-btn" class="btn" onclick="adjustScale(0.5)" disabled>
+            <svg viewBox="0 0 24 24">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <line x1="11" y1="8" x2="11" y2="14"/>
+              <line x1="8" y1="11" x2="14" y2="11"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: Guide Array Generator -->
+    <div class="sidebar-section">
+      <h3>Guide Generator</h3>
+      <p class="section-subtitle">Long-press left or bottom margins to add guides.</p>
+      
+      <div class="generator-inputs-row">
+        <div class="form-group" style="flex: 1;">
+          <label for="generator-spacing">Spacing</label>
+          <input type="number" id="generator-spacing" class="form-control" value="2" min="0.1" step="0.1">
+        </div>
+        <div class="form-group" style="flex: 1;">
+          <label for="generator-axis">Axis</label>
+          <select id="generator-axis" class="form-control">
+            <option value="both">Both</option>
+            <option value="horizontal">Horizontal</option>
+            <option value="vertical">Vertical</option>
+          </select>
+        </div>
+      </div>
+      <button class="action-btn btn-primary" onclick="generateGuideArray()">Generate Guides</button>
+    </div>
+
+    <!-- Section 4: Consolidated "How to Use" -->
+    <div class="sidebar-section">
+      <h3>How to Create Guides</h3>
+      <div class="instructions-card">
+        <div>
+          <strong>Create:</strong> Long-press on the left or bottom margins.
+        </div>
+        <div>
+          <strong>Move:</strong> Drag the guide handles along the margins.
+        </div>
+        <div>
+          <strong>Delete:</strong> Drag any handle off the edge of the screen.
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 5: Clean state utility -->
+    <div class="sidebar-section" style="margin-top: auto; padding-top: 12px;">
+      <button class="action-btn btn-secondary" onclick="clearAllGuides()">Clear All Guides</button>
+    </div>
   </div>
 
   <script>
-    // State - default config matches typical modern high-DPI iOS CSS densities
+    // Scale and Units management (PPI saved persistently)
     let ppi = parseFloat(localStorage.getItem('ruler_ppi')) || 163.0; 
     let unit = localStorage.getItem('ruler_unit') || 'cm';
-    let isCalibrating = false;
+    
+    // Safety lock configurations
+    let isSidebarOpen = false;
+    let isCalibrationLocked = true;
 
+    // Guidelines are stored internally in physical CENTIMETERS to remain scale and unit independent
+    let horizontalGuides = []; // positions relative to bottom margin (0 cm)
+    let verticalGuides = [];   // positions relative to left margin (0 cm)
+
+    // Touch system controllers
+    let draggedGuide = null; // { type: 'H'|'V', index: number }
+    let longPressTimer = null;
+    let touchStartPos = null;
+
+    // Core DOM Elements Declarations
     const svg = document.getElementById('ruler-svg');
     const gridGroup = document.getElementById('grid-group');
     const ticksGroup = document.getElementById('ticks-group');
     const labelsGroup = document.getElementById('labels-group');
+    
+    const guidesLines = document.getElementById('guides-lines');
+    const guidesLabels = document.getElementById('guides-labels');
+    const sidebar = document.querySelector('.sidebar');
     const slider = document.getElementById('scale-slider');
 
-    // Block standard rubber banding and non-passive gestures on mobile safari
+    // Prevent iOS native bounce back and drag scrolls
     document.addEventListener('touchmove', (e) => {
-      if (e.scale !== 1) e.preventDefault(); // blocks pinch zoom behavior completely
+      if (e.scale !== 1) e.preventDefault();
     }, { passive: false });
 
     function init() {
       slider.value = ppi;
+      
+      // Hook interactions on drawing area
+      svg.addEventListener('mousedown', handleInteractionStart);
+      svg.addEventListener('mousemove', handleInteractionMove);
+      window.addEventListener('mouseup', handleInteractionEnd);
+
+      svg.addEventListener('touchstart', handleInteractionStart, { passive: false });
+      svg.addEventListener('touchmove', handleInteractionMove, { passive: false });
+      window.addEventListener('touchend', handleInteractionEnd);
+
+      // Stop sidebar clicks and stylus drags from leaking down to the SVG ruler layer
+      ['mousedown', 'mousemove', 'mouseup', 'touchstart', 'touchmove', 'touchend'].forEach(evtType => {
+        sidebar.addEventListener(evtType, (e) => {
+          e.stopPropagation();
+        }, { passive: true });
+      });
+
       drawRuler();
     }
 
-    function toggleCalibrationMode() {
-      isCalibrating = !isCalibrating;
-      document.body.classList.toggle('calibrating', isCalibrating);
+    function toggleSettingsSidebar() {
+      isSidebarOpen = !isSidebarOpen;
+      document.body.classList.toggle('settings-open', isSidebarOpen);
+    }
+
+    function toggleCalibrationLock() {
+      isCalibrationLocked = !isCalibrationLocked;
+      const container = document.getElementById('calibration-container');
+      const minusBtn = document.getElementById('minus-btn');
+      const plusBtn = document.getElementById('plus-btn');
+      const lockIcon = document.getElementById('lock-icon');
+      const lockText = document.getElementById('lock-text');
+
+      if (isCalibrationLocked) {
+        container.classList.add('locked');
+        slider.disabled = true;
+        minusBtn.disabled = true;
+        plusBtn.disabled = true;
+        lockIcon.textContent = '🔒';
+        lockText.textContent = 'Unlock';
+      } else {
+        container.classList.remove('locked');
+        slider.disabled = false;
+        minusBtn.disabled = false;
+        plusBtn.disabled = false;
+        lockIcon.textContent = '🔓';
+        lockText.textContent = 'Lock';
+      }
     }
 
     function setUnit(newUnit) {
@@ -274,136 +563,434 @@
       drawRuler();
     }
 
+    // Interactive pointer logic (Long-press margin detection, drag handle updates)
+    function handleInteractionStart(e) {
+      if (e.target.closest('.sidebar') || e.target.closest('.top-bar')) return;
+
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const rect = svg.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+
+      // Grabbing active guide handles
+      const handle = e.target.closest('.guide-handle-h, .guide-handle-v');
+      if (handle) {
+        if (e.cancelable) e.preventDefault();
+        const idx = parseInt(handle.getAttribute('data-index'));
+        const type = handle.classList.contains('guide-handle-h') ? 'H' : 'V';
+        draggedGuide = { type, index: idx };
+        return;
+      }
+
+      // Check boundary margins to trigger manual guide creation
+      const inLeftRuler = (x <= 45);
+      const inBottomRuler = (y >= rect.height - 45);
+
+      if (inLeftRuler || inBottomRuler) {
+        touchStartPos = { x, y };
+        longPressTimer = setTimeout(() => {
+          if (navigator.vibrate) navigator.vibrate(50);
+
+          const pixelsPerCm = ppi / 2.54;
+          if (inLeftRuler) {
+            const u_cm = (rect.height - y) / pixelsPerCm;
+            horizontalGuides.push(u_cm);
+          } else {
+            const v_cm = x / pixelsPerCm;
+            verticalGuides.push(v_cm);
+          }
+          
+          touchStartPos = null;
+          drawRuler();
+        }, 500);
+      }
+    }
+
+    function handleInteractionMove(e) {
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      const rect = svg.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+
+      if (touchStartPos) {
+        const dx = x - touchStartPos.x;
+        const dy = y - touchStartPos.y;
+        if (Math.sqrt(dx * dx + dy * dy) > 8) {
+          clearTimeout(longPressTimer);
+          touchStartPos = null;
+        }
+      }
+
+      if (draggedGuide) {
+        if (e.cancelable) e.preventDefault();
+        const pixelsPerCm = ppi / 2.54;
+
+        if (draggedGuide.type === 'H') {
+          const clampedY = Math.max(0, Math.min(rect.height, y));
+          const u_cm = (rect.height - clampedY) / pixelsPerCm;
+          horizontalGuides[draggedGuide.index] = u_cm;
+        } else {
+          const clampedX = Math.max(0, Math.min(rect.width, x));
+          const v_cm = clampedX / pixelsPerCm;
+          verticalGuides[draggedGuide.index] = v_cm;
+        }
+        drawRuler();
+      }
+    }
+
+    function handleInteractionEnd(e) {
+      clearTimeout(longPressTimer);
+      touchStartPos = null;
+
+      if (draggedGuide) {
+        const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+        const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+        const rect = svg.getBoundingClientRect();
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+
+        // Clean trash state checks
+        if (draggedGuide.type === 'H') {
+          if (y < 15 || y > rect.height - 15) {
+            horizontalGuides.splice(draggedGuide.index, 1);
+          }
+        } else {
+          if (x < 15 || x > rect.width - 15) {
+            verticalGuides.splice(draggedGuide.index, 1);
+          }
+        }
+        draggedGuide = null;
+        drawRuler();
+      }
+    }
+
+    // Guide Array Generator
+    function generateGuideArray() {
+      const spacingVal = parseFloat(document.getElementById('generator-spacing').value);
+      if (isNaN(spacingVal) || spacingVal <= 0) return;
+
+      const rect = svg.getBoundingClientRect();
+      const pixelsPerCm = ppi / 2.54;
+      const axis = document.getElementById('generator-axis').value;
+
+      // Translate active spacing inputs to physical CM
+      const spacingCm = (unit === 'cm') ? spacingVal : (spacingVal * 2.54);
+
+      const maxWidthCm = rect.width / pixelsPerCm;
+      const maxHeightCm = rect.height / pixelsPerCm;
+
+      if (axis === 'both' || axis === 'horizontal') {
+        for (let u = spacingCm; u < maxHeightCm; u += spacingCm) {
+          if (!horizontalGuides.some(g => Math.abs(g - u) < 0.01)) {
+            horizontalGuides.push(u);
+          }
+        }
+      }
+
+      if (axis === 'both' || axis === 'vertical') {
+        for (let v = spacingCm; v < maxWidthCm; v += spacingCm) {
+          if (!verticalGuides.some(g => Math.abs(g - v) < 0.01)) {
+            verticalGuides.push(v);
+          }
+        }
+      }
+
+      drawRuler();
+    }
+
+    function clearAllGuides() {
+      horizontalGuides = [];
+      verticalGuides = [];
+      guidesLines.innerHTML = '';
+      drawRuler();
+    }
+
+    // Core Drawing Cycle
     function drawRuler() {
       const width = window.innerWidth;
       const height = window.innerHeight;
       
-      // Clear all dynamically generated geometry
       gridGroup.innerHTML = '';
       ticksGroup.innerHTML = '';
       labelsGroup.innerHTML = '';
 
-      const pixelsPerMm = ppi / 25.4;
+      const pixelsPerUnit = (unit === 'cm') ? (ppi / 2.54) : ppi;
 
       if (unit === 'cm') {
+        const pixelsPerMm = pixelsPerUnit / 10;
         const mmStep = pixelsPerMm;
-        const totalMm = Math.ceil(Math.max(width, height) / mmStep);
 
-        for (let i = 0; i <= totalMm; i++) {
-          const pos = i * mmStep;
-
-          // Draw the background structural grid lines (major cm markings)
-          if (i % 10 === 0 && i > 0) {
-            // Horizontal gridline
-            if (pos < height) {
-              appendLine(gridGroup, 0, pos, width, pos);
-            }
-            // Vertical gridline
-            if (pos < width) {
-              appendLine(gridGroup, pos, 0, pos, height);
-            }
-          }
-
-          // Left Edge Ruler Drawing (vertical ticks)
-          if (pos < height) {
+        // Vertical Scale (Left Edge) - Bottom (0) to Top
+        const totalMmY = Math.ceil(height / mmStep);
+        for (let i = 0; i <= totalMmY; i++) {
+          const pos = height - (i * mmStep);
+          if (pos >= 0) {
             let tickLength = 8;
             let strokeWidth = 1;
 
-            if (i % 10 === 0) { // CM unit
+            if (i % 10 === 0) { // CM Major
               tickLength = 24;
               strokeWidth = 2;
-              appendLabel(labelsGroup, i / 10, tickLength + 10, pos + 5, 'left');
-            } else if (i % 5 === 0) { // Half CM unit
+              
+              // Only draw positive values; corner '0' is skipped
+              if (i > 0) {
+                appendLabel(labelsGroup, i / 10, tickLength + 10, pos + 5, 'left');
+                appendLine(gridGroup, 0, pos, width, pos); 
+              }
+            } else if (i % 5 === 0) { // Half CM
               tickLength = 16;
               strokeWidth = 1.5;
             }
             appendLine(ticksGroup, 0, pos, tickLength, pos, strokeWidth);
           }
+        }
 
-          // Bottom Edge Ruler Drawing (horizontal ticks)
+        // Horizontal Scale (Bottom Edge) - Left (0) to Right
+        const totalMmX = Math.ceil(width / mmStep);
+        for (let i = 0; i <= totalMmX; i++) {
+          const pos = i * mmStep;
           if (pos < width) {
             let tickLength = 8;
             let strokeWidth = 1;
 
-            if (i % 10 === 0) { // CM unit
+            if (i % 10 === 0) { // CM Major
               tickLength = 24;
               strokeWidth = 2;
-              appendLabel(labelsGroup, i / 10, pos, height - tickLength - 10, 'bottom');
-            } else if (i % 5 === 0) { // Half CM unit
+              
+              if (i > 0) {
+                appendLabel(labelsGroup, i / 10, pos, height - tickLength - 10, 'bottom');
+                appendLine(gridGroup, pos, 0, pos, height); 
+              }
+            } else if (i % 5 === 0) { // Half CM
               tickLength = 16;
               strokeWidth = 1.5;
             }
             appendLine(ticksGroup, pos, height, pos, height - tickLength, strokeWidth);
           }
         }
+
       } else {
-        // Inch System calculation
-        const inchStep = ppi;
-        const subStep = ppi / 16; // 1/16th inch increments
-        const totalSubSteps = Math.ceil(Math.max(width, height) / subStep);
+        const subStep = pixelsPerUnit / 16; 
 
-        for (let i = 0; i <= totalSubSteps; i++) {
-          const pos = i * subStep;
-
-          // Draw structural background grid lines for major inch increments
-          if (i % 16 === 0 && i > 0) {
-            if (pos < height) appendLine(gridGroup, 0, pos, width, pos);
-            if (pos < width) appendLine(gridGroup, pos, 0, pos, height);
-          }
-
-          // Left Edge Ruler Drawing
-          if (pos < height) {
+        // Vertical Scale (Left Edge)
+        const totalStepsY = Math.ceil(height / subStep);
+        for (let i = 0; i <= totalStepsY; i++) {
+          const pos = height - (i * subStep);
+          if (pos >= 0) {
             let tickLength = 6;
             let strokeWidth = 1;
 
-            if (i % 16 === 0) { // Major Inch
+            if (i % 16 === 0) { // Full Inch
               tickLength = 26;
               strokeWidth = 2;
-              appendLabel(labelsGroup, i / 16, tickLength + 10, pos + 5, 'left');
-            } else if (i % 8 === 0) { // 1/2 Inch
+              
+              if (i > 0) {
+                appendLabel(labelsGroup, i / 16, tickLength + 10, pos + 5, 'left');
+                appendLine(gridGroup, 0, pos, width, pos);
+              }
+            } else if (i % 8 === 0) { 
               tickLength = 18;
               strokeWidth = 1.5;
-            } else if (i % 4 === 0) { // 1/4 Inch
+            } else if (i % 4 === 0) { 
               tickLength = 12;
               strokeWidth = 1.2;
-            } else if (i % 2 === 0) { // 1/8 Inch
+            } else if (i % 2 === 0) { 
               tickLength = 8;
             }
             appendLine(ticksGroup, 0, pos, tickLength, pos, strokeWidth);
           }
+        }
 
-          // Bottom Edge Ruler Drawing
+        // Horizontal Scale (Bottom Edge)
+        const totalStepsX = Math.ceil(width / subStep);
+        for (let i = 0; i <= totalStepsX; i++) {
+          const pos = i * subStep;
           if (pos < width) {
             let tickLength = 6;
             let strokeWidth = 1;
 
-            if (i % 16 === 0) { // Major Inch
+            if (i % 16 === 0) { // Full Inch
               tickLength = 26;
               strokeWidth = 2;
-              appendLabel(labelsGroup, i / 16, pos, height - tickLength - 10, 'bottom');
-            } else if (i % 8 === 0) { // 1/2 Inch
+              
+              if (i > 0) {
+                appendLabel(labelsGroup, i / 16, pos, height - tickLength - 10, 'bottom');
+                appendLine(gridGroup, pos, 0, pos, height);
+              }
+            } else if (i % 8 === 0) { 
               tickLength = 18;
               strokeWidth = 1.5;
-            } else if (i % 4 === 0) { // 1/4 Inch
+            } else if (i % 4 === 0) { 
               tickLength = 12;
               strokeWidth = 1.2;
-            } else if (i % 2 === 0) { // 1/8 Inch
+            } else if (i % 2 === 0) { 
               tickLength = 8;
             }
             appendLine(ticksGroup, pos, height, pos, height - tickLength, strokeWidth);
           }
         }
       }
+
+      // Reconciliation handles redraw calculations internally
+      drawGuidelines(width, height);
     }
 
-    function appendLine(parent, x1, y1, x2, y2, strokeWidth = 1) {
+    // Dynamic Element Reconciliation (prevents touch/drag drop cancellation on render)
+    function drawGuidelines(width, height) {
+      const pixelsPerCm = ppi / 2.54;
+
+      // 1. HORIZONTAL GUIDELINES (Cyan)
+      const existingHGroups = Array.from(guidesLines.querySelectorAll('.guide-group-h'));
+      
+      // Match structures and adjust container sizing safely
+      while (existingHGroups.length < horizontalGuides.length) {
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.setAttribute('class', 'guide-group-h');
+        
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('class', 'guide-line-h');
+        group.appendChild(line);
+        
+        const handle = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        handle.setAttribute('class', 'guide-handle-h');
+        group.appendChild(handle);
+        
+        guidesLines.appendChild(group);
+        existingHGroups.push(group);
+      }
+      
+      while (existingHGroups.length > horizontalGuides.length) {
+        const group = existingHGroups.pop();
+        group.remove();
+      }
+
+      // Update positions without destroying active target handles
+      horizontalGuides.forEach((g_cm, idx) => {
+        const y = height - (g_cm * pixelsPerCm);
+        const group = existingHGroups[idx];
+        
+        const line = group.querySelector('.guide-line-h');
+        line.setAttribute('x1', '0');
+        line.setAttribute('y1', y);
+        line.setAttribute('x2', width);
+        line.setAttribute('y2', y);
+        line.setAttribute('stroke-width', '1.5');
+        line.setAttribute('stroke', 'var(--cyan-guide)');
+        
+        const handle = group.querySelector('.guide-handle-h');
+        handle.setAttribute('x', '2');
+        handle.setAttribute('y', y - 10);
+        handle.setAttribute('width', '24');
+        handle.setAttribute('height', '20');
+        handle.setAttribute('rx', '6');
+        handle.setAttribute('fill', 'var(--cyan-guide)');
+        handle.setAttribute('data-index', idx);
+        handle.style.filter = "drop-shadow(0px 2px 5px rgba(0,0,0,0.2))";
+      });
+
+      // 2. VERTICAL GUIDELINES (Red)
+      const existingVGroups = Array.from(guidesLines.querySelectorAll('.guide-group-v'));
+      
+      while (existingVGroups.length < verticalGuides.length) {
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.setAttribute('class', 'guide-group-v');
+        
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('class', 'guide-line-v');
+        group.appendChild(line);
+        
+        const handle = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        handle.setAttribute('class', 'guide-handle-v');
+        group.appendChild(handle);
+        
+        guidesLines.appendChild(group);
+        existingVGroups.push(group);
+      }
+      
+      while (existingVGroups.length > verticalGuides.length) {
+        const group = existingVGroups.pop();
+        group.remove();
+      }
+
+      verticalGuides.forEach((g_cm, idx) => {
+        const x = g_cm * pixelsPerCm;
+        const group = existingVGroups[idx];
+        
+        const line = group.querySelector('.guide-line-v');
+        line.setAttribute('x1', x);
+        line.setAttribute('y1', '0');
+        line.setAttribute('x2', x);
+        line.setAttribute('y2', height);
+        line.setAttribute('stroke-width', '1.5');
+        line.setAttribute('stroke', 'var(--red-guide)');
+        
+        const handle = group.querySelector('.guide-handle-v');
+        handle.setAttribute('x', x - 10);
+        handle.setAttribute('y', height - 26);
+        handle.setAttribute('width', '20');
+        handle.setAttribute('height', '24');
+        handle.setAttribute('rx', '6');
+        handle.setAttribute('fill', 'var(--red-guide)');
+        handle.setAttribute('data-index', idx);
+        handle.style.filter = "drop-shadow(0px 2px 5px rgba(0,0,0,0.2))";
+      });
+
+      // 3. LABELS (Re-rendered safely as they don't capture touch pointer drags)
+      guidesLabels.innerHTML = '';
+
+      // Calculate Horizontal interval labels (measures strictly inside configured guides)
+      if (horizontalGuides.length > 0) {
+        const sortedH = [0, ...horizontalGuides].sort((a, b) => a - b);
+        for (let i = 0; i < sortedH.length - 1; i++) {
+          const d_cm = sortedH[i+1] - sortedH[i];
+          if (d_cm > 0.05) {
+            const midCm = (sortedH[i] + sortedH[i+1]) / 2;
+            const yMid = height - (midCm * pixelsPerCm);
+
+            let labelText = "";
+            if (unit === 'cm') {
+              labelText = d_cm.toFixed(1);
+            } else {
+              labelText = (d_cm / 2.54).toFixed(2);
+            }
+            appendPillLabel(guidesLabels, labelText, 60, yMid, 'var(--cyan-bg)', 'var(--cyan-text)', 'var(--cyan-guide)');
+          }
+        }
+      }
+
+      // Calculate Vertical interval labels (measures strictly inside configured guides)
+      if (verticalGuides.length > 0) {
+        const sortedV = [0, ...verticalGuides].sort((a, b) => a - b);
+        for (let i = 0; i < sortedV.length - 1; i++) {
+          const d_cm = sortedV[i+1] - sortedV[i];
+          if (d_cm > 0.05) {
+            const midCm = (sortedV[i] + sortedV[i+1]) / 2;
+            const xMid = midCm * pixelsPerCm;
+
+            let labelText = "";
+            if (unit === 'cm') {
+              labelText = d_cm.toFixed(1);
+            } else {
+              labelText = (d_cm / 2.54).toFixed(2);
+            }
+            appendPillLabel(guidesLabels, labelText, xMid, height - 60, 'var(--red-bg)', 'var(--red-text)', 'var(--red-guide)');
+          }
+        }
+      }
+    }
+
+    // SVG Layout Helpers
+    function appendLine(parent, x1, y1, x2, y2, strokeWidth = 1, strokeColor) {
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('x1', x1);
       line.setAttribute('y1', y1);
       line.setAttribute('x2', x2);
       line.setAttribute('y2', y2);
-      if (strokeWidth !== 1) {
-        line.setAttribute('stroke-width', strokeWidth);
+      line.setAttribute('stroke-width', strokeWidth);
+      if (strokeColor) {
+        line.setAttribute('stroke', strokeColor);
       }
       parent.appendChild(line);
     }
@@ -413,7 +1000,7 @@
       txt.setAttribute('x', x);
       txt.setAttribute('y', y);
       txt.setAttribute('fill', 'var(--ruler-color)');
-      txt.setAttribute('font-size', '14');
+      txt.setAttribute('font-size', '13');
       txt.setAttribute('font-weight', '500');
       
       if (alignment === 'left') {
@@ -428,14 +1015,45 @@
       parent.appendChild(txt);
     }
 
+    function appendPillLabel(parent, text, x, y, bg, textColor, strokeColor) {
+      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      
+      const w = (unit === 'cm') ? 38 : 46; 
+      const h = 20;
+
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', x - w / 2);
+      rect.setAttribute('y', y - h / 2);
+      rect.setAttribute('width', w);
+      rect.setAttribute('height', h);
+      rect.setAttribute('rx', 4);
+      rect.setAttribute('fill', bg);
+      rect.setAttribute('stroke', strokeColor);
+      rect.setAttribute('stroke-width', 1);
+      group.appendChild(rect);
+
+      const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      txt.setAttribute('x', x);
+      txt.setAttribute('y', y);
+      txt.setAttribute('text-anchor', 'middle');
+      txt.setAttribute('dominant-baseline', 'central');
+      txt.setAttribute('fill', textColor);
+      txt.setAttribute('font-size', '11');
+      txt.setAttribute('font-weight', 'bold');
+      txt.textContent = text;
+      group.appendChild(txt);
+
+      parent.appendChild(group);
+    }
+
     window.addEventListener('resize', drawRuler);
     window.addEventListener('orientationchange', () => setTimeout(drawRuler, 200));
 
-    // Register PWA service worker logic
+    // Register active PWA offline workers
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js').catch(err => {
-          console.warn("ServiceWorker registration omitted or unsupported on local testing:", err);
+          console.warn("ServiceWorker registration bypassed on local container testing:", err);
         });
       });
     }
