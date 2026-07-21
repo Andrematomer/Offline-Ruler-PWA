@@ -1,21 +1,29 @@
 # Offline Ruler PWA
 
-A simple, minimalist, offline-first Progressive Web App (PWA) ruler designed for mobile phone screens in emergency situations. 
+**Live Link:** [click here](https://andrematomer.github.io/Offline-Ruler-PWA/)
 
-Since web browsers cannot natively determine the absolute physical size of a device's screen, this tool allows you to manually calibrate the on-screen scale against a ruler once. The scale calibration persists across sessions.
+A simple, offline-first Progressive Web App (PWA) ruler for mobile screens, featuring manual calibration and draggable guidelines.
+
+## Quick Start
+
+### 1. Calibrate the Screen
+1. Open settings (Gear icon) and tap **Unlock**.
+2. Align a physical ruler with your screen.
+3. Adjust the slider (or `+`/`-`) until the tick marks match exactly.
+4. Tap **Lock** to save and protect your calibration.
+
+### 2. Use Guidelines
+- **Create:** Long-press on the left or bottom ruler margins.
+- **Move:** Drag the guide handles along the margins.
+- **Delete:** Drag any handle off the edge of the screen.
+- **Distance:** Badges automatically display the distance between adjacent guides.
 
 ## Features
 
-- **Offline-First:** Uses a Service Worker to cache all assets. Once loaded on your device, it requires no internet connection to open and function.
-- **Persistent Settings:** Calibration settings and unit selections (CM/Inches) are saved directly to `localStorage`.
-- **UI Lock:** Configured as a fullscreen PWA to block accidental pinch-to-zoom, swipe-refresh, and rubber-band scrolling during physical measurement.
-- **Single-File Core:** Simple file structure utilizing vanilla JS and dynamic SVG generation for clean rendering on high-DPI (Retina) screens.
+- **Offline Support:** Service worker enables full functionality without cell service.
+- **Persistent Scale:** Saves your CM/Inch scale settings directly to `localStorage`.
+- **Absolute Coordinate Scaling:** Guides stay aligned when switching units (e.g. 2.0 cm stays fixed at 0.79 inches).
+- **PWA Optimized:** stand-alone full-screen setup with disabled pinch-to-zoom to prevent accidental screen changes.
 
-## Project Structure
-
-```text
-├── index.html       # Single-file UI, drawing logic, and layout locking
-├── manifest.json    # PWA metadata for installation setup
-├── sw.js            # Service Worker for local caching
-├── icon.svg         # Clean diagonal ruler vector icon
-└── LICENSE          # MIT License
+## License
+MIT License.
