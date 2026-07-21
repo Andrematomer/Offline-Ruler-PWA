@@ -510,6 +510,9 @@
       });
 
       drawRuler();
+
+      // Fire a deferred calculation pass to correct iOS PWA viewport height race conditions on startup
+      setTimeout(drawRuler, 300);
     }
 
     function toggleSettingsSidebar() {
